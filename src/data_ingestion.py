@@ -4,8 +4,8 @@ from pathlib import Path
 import nltk
 import pdfplumber
 
-nltk.download("punkt", quite=True)
-nltk.download("stopwords", quite=True)
+nltk.download("punkt", quiet=True)
+nltk.download("stopwords", quiet=True)
 
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
@@ -27,7 +27,7 @@ def clean_text(text: str) -> str:
 
     text = re.sub(r"^\s*\d+\s*$", "", text, flags=re.MULTILINE)
     lines = text.split("\n")
-    lines = [l for l in lines if len(l.strip()) > 4]
+    lines = [line for line in lines if len(line.strip()) > 4]
     text = " ".join(lines)
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"[^\w\s\.\,\;\:\!\?\-\(\)\'\"]", " ", text)
@@ -37,7 +37,10 @@ def clean_text(text: str) -> str:
 
 
 def split_into_chunks(
-    text: str, page_num: int, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+    text: str,
+    page_num: int,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
 ) -> list[dict]:
 
     words = text.split()
@@ -83,5 +86,7 @@ def ingest_pdf(pdf_path: Path) -> list[dict]:
             all_chunks.append(chunk)
             chunk_id += 1
 
-    print(f"[ingestion] Created {len(all_chunks)} chunks from {len(pages)} pages")
+    print(
+        f"[ingestion] Created {len(all_chunks)} chunks from {len(pages)} pages"
+    )
     return all_chunks
