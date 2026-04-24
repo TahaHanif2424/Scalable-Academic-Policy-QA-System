@@ -60,15 +60,11 @@ jobs:
             --targets "Key=instanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
             --parameters 'commands=[
             "set -e",
-            "cd /home/deploy/app",
-            "echo Updating code...",
-            "git fetch origin",
-            "git reset --hard origin/main",
-            "echo Activating venv...",
-            "source venv/bin/activate",
-            "echo Installing deps...",
-            "pip install -r requirements.txt",
+            "echo Updating code as deploy user...",
+            "su - deploy -c \"cd /home/deploy/app && git fetch origin && git reset --hard origin/main\"",
+            "echo Installing dependencies as deploy user...",
+            "su - deploy -c \"cd /home/deploy/app && source venv/bin/activate && pip install -r requirements.txt\"",
             "echo Restarting app...",
-            "sudo systemctl restart app",
-            "echo Done"
+            "systemctl restart app.service",
+            "echo Deployment Done"
             ]'
