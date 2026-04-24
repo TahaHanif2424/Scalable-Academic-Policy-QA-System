@@ -51,7 +51,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::463518255010:role/BDA-SSM-ROLE
-          aws-region: ap-south-1
+          aws-region: us-east-1
 
       - name: Deploy to EC2 via SSM
         run: |
