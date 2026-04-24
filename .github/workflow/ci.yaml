@@ -1,0 +1,73 @@
+name: Secure CI/CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      - run: |
+          pip install flake8
+          flake8 .
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      - run: |
+          pip install -r requirements.txt pytest
+          pytest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy safely
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+
+            set -e  # stop on error
+
+            cd /home/deploy/app
+
+            echo "Updating code..."
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Activating venv..."
+            source venv/bin/activate
+
+            echo "Installing deps..."
+            pip install -r requirements.txt
+
+            echo "Restarting app..."
+            sudo systemctl restart app
+
+            echo "Done"
+
+          EOF
