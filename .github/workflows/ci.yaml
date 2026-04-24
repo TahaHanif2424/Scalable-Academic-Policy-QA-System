@@ -71,4 +71,4 @@ jobs:
             "echo Restarting app...",
             "sudo systemctl restart app",
             "echo Done"
-          ]'
+            ]'
