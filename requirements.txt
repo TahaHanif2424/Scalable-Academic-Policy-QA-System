@@ -1,2 +1,6 @@
 flake8
 pytest
+pdfplumber
+nltk
+black
+isort
