@@ -50,7 +50,7 @@ jobs:
 
       - name: Deploy safely
         run: |
-          ssh -o StrictHostKeyChecking=no -o BatchMode=yes -tt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o BatchMode=yes -o PubkeyAcceptedKeyTypes=+ssh-rsa -tt ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
 
             set -e  # stop on error
 
