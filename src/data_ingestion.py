@@ -86,7 +86,5 @@ def ingest_pdf(pdf_path: Path) -> list[dict]:
             all_chunks.append(chunk)
             chunk_id += 1
 
-    print(
-        f"[ingestion] Created {len(all_chunks)} chunks from {len(pages)} pages"
-    )
+    print(f"[ingestion] Created {len(all_chunks)} chunks from {len(pages)} pages")
     return all_chunks

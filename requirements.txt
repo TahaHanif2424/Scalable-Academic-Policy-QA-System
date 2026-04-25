@@ -4,3 +4,5 @@ pdfplumber
 nltk
 black
 isort
+pymongo
+python-dotenv
