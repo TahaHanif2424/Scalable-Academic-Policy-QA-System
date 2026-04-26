@@ -3,19 +3,17 @@ import random
 import re
 
 import numpy as np
+from nltk.corpus import stopwords
 
 from src.database import (
-        get_all_chunks,
-        get_all_minhash_signatures,
-        get_candidate_chunk_ids,
-        get_hash_functions,
-        save_hash_functions,
-        save_lsh_buckets,
-        save_minhash_signatures,
-    )
-
-
-from nltk.corpus import stopwords
+    get_all_chunks,
+    get_all_minhash_signatures,
+    get_candidate_chunk_ids,
+    get_hash_functions,
+    save_hash_functions,
+    save_lsh_buckets,
+    save_minhash_signatures,
+)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 NUM_HASH_FUNCTIONS = 128  # N — more = more accurate, slower to compute
@@ -178,4 +176,3 @@ def query_minhash(query_text: str, top_k: int = 5) -> list[dict]:
 
     scored.sort(key=lambda x: x["similarity"], reverse=True)
     return scored[:top_k]
-
