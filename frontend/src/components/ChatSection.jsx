@@ -1,21 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Send, Bot, User, Sparkles, Copy, ThumbsUp, ThumbsDown,
-  RotateCcw, Lightbulb, ChevronDown, Loader2
+  RotateCcw, Lightbulb, Loader2
 } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 const SUGGESTED_QUESTIONS = [
-  'What are the main themes in this document?',
-  'Summarize the key findings in 3 bullet points.',
-  'What data sources are mentioned?',
-  'Identify any statistical trends or patterns.',
-  'What are the main conclusions or recommendations?',
-  'Extract all numerical data and metrics.',
+  'What is the minimum GPA requirement?', 
+  'What happens if a student fails a course?', 
+  'What is the attendance policy?', 
+  'How many times can a course be repeated?',
 ];
 
-function MessageBubble({ msg }) {
+function MessageBubble({ msg, onOpenChunks }) {
   const isUser = msg.role === 'user';
   const [copied, setCopied] = useState(false);
+  const hasTopChunks = !isUser && Array.isArray(msg.topChunks) && msg.topChunks.length > 0;
 
   const copy = () => {
     navigator.clipboard.writeText(msg.content);
@@ -54,7 +55,15 @@ function MessageBubble({ msg }) {
           fontSize: 13.5, lineHeight: 1.7, color: 'var(--text-primary)',
           whiteSpace: 'pre-wrap',
           boxShadow: isUser ? '0 4px 20px rgba(99,179,237,0.1)' : '0 4px 20px rgba(0,0,0,0.2)',
-        }}>
+          cursor: hasTopChunks ? 'pointer' : 'default',
+        }}
+          onClick={() => {
+            if (hasTopChunks) {
+              onOpenChunks(msg.topChunks, msg.topK || msg.topChunks.length);
+            }
+          }}
+          title={hasTopChunks ? 'Click to view top chunks' : ''}
+        >
           {msg.loading ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0' }}>
               {[0, 1, 2].map(i => (
@@ -71,12 +80,39 @@ function MessageBubble({ msg }) {
         {/* Actions */}
         {!isUser && !msg.loading && (
           <div style={{ display: 'flex', gap: 4 }}>
+            {hasTopChunks && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenChunks(msg.topChunks, msg.topK || msg.topChunks.length);
+                }}
+                title="View top chunks"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 6,
+                  background: 'transparent', border: '1px solid var(--border)',
+                  color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,179,237,0.08)'; e.currentTarget.style.color = 'var(--accent-blue)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              >
+                Top chunks
+              </button>
+            )}
             {[
               { icon: Copy, label: copied ? 'Copied!' : 'Copy', action: copy },
               { icon: ThumbsUp, label: 'Good', action: () => {} },
               { icon: ThumbsDown, label: 'Bad', action: () => {} },
             ].map(({ icon: Icon, label, action }) => (
-              <button key={label} onClick={action} title={label} style={{
+              <button
+                key={label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  action();
+                }}
+                title={label}
+                style={{
                 display: 'flex', alignItems: 'center', gap: 4,
                 padding: '3px 8px', borderRadius: 6,
                 background: 'transparent', border: '1px solid var(--border)',
@@ -108,7 +144,7 @@ function MessageBubble({ msg }) {
   );
 }
 
-export default function ChatSection({ files, pastedText }) {
+export default function ChatSection({ files }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -118,9 +154,14 @@ export default function ChatSection({ files, pastedText }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [indexedFileKey, setIndexedFileKey] = useState(null);
+  const [chunkPopup, setChunkPopup] = useState({ open: false, chunks: [], topK: 0 });
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
-  const hasContent = files.length > 0 || pastedText.trim().length > 0;
+  const hasContent = files.length > 0;
+
+  const currentPdf = files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  const currentPdfKey = currentPdf ? `${currentPdf.name}:${currentPdf.size}:${currentPdf.lastModified || 0}` : null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -130,22 +171,71 @@ export default function ChatSection({ files, pastedText }) {
     const q = (text || input).trim();
     if (!q || isLoading) return;
 
+    if (!currentPdf && !indexedFileKey) {
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', content: q },
+        {
+          role: 'assistant',
+          content: 'Please upload a PDF first. Follow-up questions will work without re-upload once the first PDF is indexed.',
+        }
+      ]);
+      setInput('');
+      setShowSuggestions(false);
+      return;
+    }
+
     setInput('');
     setShowSuggestions(false);
     setMessages(prev => [...prev, { role: 'user', content: q }]);
     setIsLoading(true);
 
-    // Simulate AI thinking delay — backend integration point
-    setTimeout(() => {
+    const shouldUploadPdf = !!currentPdf && currentPdfKey !== indexedFileKey;
+
+    try {
+      const formData = new FormData();
+      formData.append('question', q);
+      formData.append('top_k', '5');
+
+      if (shouldUploadPdf) {
+        formData.append('file', currentPdf);
+      }
+
+      const res = await fetch(`${API_BASE_URL}/process`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.detail || `Request failed (${res.status})`);
+      }
+
+      if (shouldUploadPdf) {
+        setIndexedFileKey(currentPdfKey);
+      }
+
+      const answerText = (data?.answer || '').trim() || 'No answer returned by backend.';
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          content: `This is a UI demo. Once connected to a backend, I will analyze your ${files.length} file(s) and ${pastedText.length} characters of pasted text to answer:\n\n"${q}"\n\nConnect your AI/NLP backend (e.g., LangChain, OpenAI, or a custom RAG pipeline) to make this fully functional.`,
+          content: answerText,
+          topChunks: Array.isArray(data?.top_chunks) ? data.top_chunks : [],
+          topK: data?.top_k || 0,
         }
       ]);
+    } catch (err) {
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Backend error: ${err.message || 'Unknown error'}`,
+        }
+      ]);
+    } finally {
       setIsLoading(false);
-    }, 1400);
+    }
   };
 
   const handleKey = (e) => {
@@ -160,6 +250,7 @@ export default function ChatSection({ files, pastedText }) {
       role: 'assistant',
       content: "Chat cleared. Upload new documents or ask a new question!",
     }]);
+    setIndexedFileKey(null);
     setShowSuggestions(true);
   };
 
@@ -210,7 +301,13 @@ export default function ChatSection({ files, pastedText }) {
         flex: 1, overflowY: 'auto', padding: '20px',
         display: 'flex', flexDirection: 'column', gap: 16,
       }}>
-        {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
+        {messages.map((msg, i) => (
+          <MessageBubble
+            key={i}
+            msg={msg}
+            onOpenChunks={(chunks, topK) => setChunkPopup({ open: true, chunks, topK })}
+          />
+        ))}
         {isLoading && <MessageBubble msg={{ role: 'assistant', loading: true }} />}
         <div ref={bottomRef} />
       </div>
@@ -253,7 +350,7 @@ export default function ChatSection({ files, pastedText }) {
             fontSize: 11, color: 'var(--accent-pink)',
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
-            ⚠ Upload a document or paste text first for context-aware answers.
+            ⚠ Upload a PDF first for context-aware answers.
           </div>
         )}
         <div style={{
@@ -306,6 +403,75 @@ export default function ChatSection({ files, pastedText }) {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
+
+      {chunkPopup.open && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+          onClick={() => setChunkPopup({ open: false, chunks: [], topK: 0 })}
+        >
+          <div
+            style={{
+              width: 'min(960px, 95vw)',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              background: 'rgba(10,14,38,0.98)',
+              border: '1px solid var(--border-bright)',
+              borderRadius: 14,
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 16 }}>
+                Top {chunkPopup.topK || chunkPopup.chunks.length} Chunks
+              </h3>
+              <button
+                onClick={() => setChunkPopup({ open: false, chunks: [], topK: 0 })}
+                style={{
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {chunkPopup.chunks.map((chunk, idx) => (
+                <div
+                  key={`${chunk.chunk_id || 'chunk'}-${idx}`}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    padding: 12,
+                    background: 'rgba(255,255,255,0.03)',
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: 'var(--accent-blue)', marginBottom: 6 }}>
+                    #{idx + 1} • chunk_id: {String(chunk.chunk_id)} • page: {String(chunk.page_num)} • source: {String(chunk.source)} • score: {Number(chunk.score || 0).toFixed(4)}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                    {chunk.text || '[No text available]'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

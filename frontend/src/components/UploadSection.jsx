@@ -49,7 +49,13 @@ function FileCard({ file, onRemove }) {
   );
 }
 
-export default function UploadSection({ files, setFiles, pastedText, setPastedText }) {
+export default function UploadSection({
+  files,
+  setFiles,
+  pastedText,
+  setPastedText,
+  allowPastedText = true,
+}) {
   const [dragging, setDragging] = useState(false);
   const [showTextInput, setShowTextInput] = useState(false);
   const fileInputRef = useRef(null);
@@ -126,24 +132,25 @@ export default function UploadSection({ files, setFiles, pastedText, setPastedTe
         <input ref={fileInputRef} type="file" accept=".pdf,.txt,text/plain,application/pdf" multiple style={{ display: 'none' }} onChange={handleFileInput} />
       </div>
 
-      {/* Paste Text Toggle */}
-      <button
-        onClick={() => setShowTextInput(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 16px', borderRadius: 10,
-          background: showTextInput ? 'rgba(183,148,244,0.1)' : 'rgba(255,255,255,0.02)',
-          border: `1px solid ${showTextInput ? 'rgba(183,148,244,0.35)' : 'var(--border)'}`,
-          color: showTextInput ? 'var(--accent-purple)' : 'var(--text-secondary)',
-          fontSize: 13, fontWeight: 500, transition: 'all 0.2s',
-        }}
-      >
-        <Type size={14} />
-        {showTextInput ? 'Hide text input' : 'Paste large text directly'}
-        <Plus size={13} style={{ marginLeft: 'auto', transform: showTextInput ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
-      </button>
+      {allowPastedText && (
+        <button
+          onClick={() => setShowTextInput(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 16px', borderRadius: 10,
+            background: showTextInput ? 'rgba(183,148,244,0.1)' : 'rgba(255,255,255,0.02)',
+            border: `1px solid ${showTextInput ? 'rgba(183,148,244,0.35)' : 'var(--border)'}`,
+            color: showTextInput ? 'var(--accent-purple)' : 'var(--text-secondary)',
+            fontSize: 13, fontWeight: 500, transition: 'all 0.2s',
+          }}
+        >
+          <Type size={14} />
+          {showTextInput ? 'Hide text input' : 'Paste large text directly'}
+          <Plus size={13} style={{ marginLeft: 'auto', transform: showTextInput ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
+        </button>
+      )}
 
-      {showTextInput && (
+      {allowPastedText && showTextInput && (
         <div style={{ animation: 'slideIn 0.3s ease' }}>
           <textarea
             value={pastedText}
