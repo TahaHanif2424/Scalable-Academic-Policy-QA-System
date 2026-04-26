@@ -2,6 +2,7 @@ import os
 import pickle
 import time
 
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -14,6 +15,43 @@ except ModuleNotFoundError:
 INDEX_PATH = "index/tfidf_index.pkl"  # where we save the fitted vectorizer
 TOP_K_DEFAULT = 5
 MIN_SCORE = 0.05  # discard chunks with cosine similarity below this
+TFIDF_CANDIDATE_K = 20
+GRAPH_ALPHA = 0.7
+GRAPH_SIM_THRESHOLD = 0.1
+GRAPH_MAX_ITERS = 30
+GRAPH_TOL = 1e-6
+
+
+def _graph_rerank(seed_scores: list[float], candidate_matrix) -> list[float]:
+    """
+    Build a chunk similarity graph over TF-IDF candidates and propagate relevance.
+    This smooths local score noise and promotes chunks central to related evidence.
+    """
+    n = len(seed_scores)
+    if n <= 1:
+        return seed_scores
+
+    seed = np.asarray(seed_scores, dtype=np.float64)
+    seed_max = seed.max()
+    if seed_max > 0:
+        seed = seed / seed_max
+
+    sim = cosine_similarity(candidate_matrix, candidate_matrix)
+    np.fill_diagonal(sim, 0.0)
+    sim[sim < GRAPH_SIM_THRESHOLD] = 0.0
+
+    row_sums = sim.sum(axis=1, keepdims=True)
+    transition = np.divide(sim, row_sums, out=np.zeros_like(sim), where=row_sums != 0)
+
+    rank = seed.copy()
+    for _ in range(GRAPH_MAX_ITERS):
+        updated = GRAPH_ALPHA * seed + (1.0 - GRAPH_ALPHA) * (transition @ rank)
+        if np.linalg.norm(updated - rank, ord=1) < GRAPH_TOL:
+            rank = updated
+            break
+        rank = updated
+
+    return rank.tolist()
 
 
 # ─── Step 1: Build TF-IDF index ───────────────────────────────────────────────
@@ -86,13 +124,47 @@ def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
     scores = cosine_similarity(query_vector, matrix).flatten()
 
     scored = [
-        {"chunk_id": chunk_ids[i], "score": float(scores[i])}
+        {"index": i, "chunk_id": chunk_ids[i], "tfidf_score": float(scores[i])}
         for i in range(len(chunk_ids))
         if scores[i] >= MIN_SCORE
     ]
-    scored.sort(key=lambda x: x["score"], reverse=True)
+    scored.sort(key=lambda x: x["tfidf_score"], reverse=True)
 
-    return scored[:top_k]
+    candidate_k = max(top_k, TFIDF_CANDIDATE_K)
+    candidates = scored[:candidate_k]
+    if not candidates:
+        return []
+
+    candidate_indices = [item["index"] for item in candidates]
+    candidate_matrix = matrix[candidate_indices]
+    seed_scores = [item["tfidf_score"] for item in candidates]
+
+    graph_scores = _graph_rerank(seed_scores, candidate_matrix)
+
+    seed_arr = np.asarray(seed_scores, dtype=np.float64)
+    graph_arr = np.asarray(graph_scores, dtype=np.float64)
+
+    if seed_arr.max() > 0:
+        seed_arr = seed_arr / seed_arr.max()
+    if graph_arr.max() > 0:
+        graph_arr = graph_arr / graph_arr.max()
+
+    combined = 0.45 * seed_arr + 0.55 * graph_arr
+
+    reranked = []
+    for i, item in enumerate(candidates):
+        reranked.append(
+            {
+                "chunk_id": item["chunk_id"],
+                "score": float(combined[i]),
+                "tfidf_score": float(item["tfidf_score"]),
+                "graph_score": float(graph_scores[i]),
+            }
+        )
+
+    reranked.sort(key=lambda x: x["score"], reverse=True)
+
+    return reranked[:top_k]
 
 
 # ─── Step 4: Get top-k chunks with full text ─────────────────────────────────

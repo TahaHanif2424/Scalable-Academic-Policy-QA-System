@@ -16,6 +16,7 @@ All of this is handled in a single endpoint in `main.py`.
 
 - First request for a new PDF: ingestion + all index builds run.
 - Next requests for the same PDF: app reuses stored chunks and indexes.
+- Follow-up questions can be sent without re-uploading the PDF, as long as one document is already indexed.
 - This avoids expensive rebuilds on every request and makes repeated queries much faster.
 
 ## Setup
@@ -31,11 +32,11 @@ pip install -r requirements.txt
 ```env
 MONGO_URL=mongodb://localhost:27017
 MONGO_DB=qa_system
-GEMINI_API_KEY=your-gemini-key-here
-LLM_MODEL=gemini-2.0-flash
+GROQ_API_KEY=your-groq-key-here
+LLM_MODEL=llama-3.3-70b-versatile
 ```
 
-If `GEMINI_API_KEY` is missing, the app returns a fallback answer from top retrieved text.
+If `GROQ_API_KEY` is missing, the app returns a fallback answer from top retrieved text.
 
 3. Start MongoDB.
 
@@ -59,7 +60,7 @@ Health check:
 
 ### Input (multipart/form-data)
 
-- `file`: PDF file
+- `file`: PDF file (required only for first/new document)
 - `question`: user question
 - `top_k`: optional integer (default: 5)
 
@@ -67,6 +68,8 @@ Health check:
 
 JSON response includes:
 
+- `top_k`
+- `top_chunks` (top retrieved chunks with full chunk text + metadata)
 - `answer`
 - `model`
 - `evidence`

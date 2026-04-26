@@ -7,9 +7,10 @@ import pdfplumber
 nltk.download("punkt", quiet=True)
 nltk.download("stopwords", quiet=True)
 
-CHUNK_SIZE = 300
-CHUNK_OVERLAP = 50
-MIN_CHUNK_SIZE = 100
+# Larger chunks preserve more context for downstream retrieval/reranking.
+CHUNK_SIZE = 600
+CHUNK_OVERLAP = 120
+MIN_CHUNK_SIZE = 150
 
 
 def extract_text_from_pdf(pdf_path: Path) -> list[dict]:

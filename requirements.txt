@@ -9,7 +9,7 @@ isort
 pymongo
 python-dotenv
 scikit-learn
-google-generativeai
+groq
 fastapi
 uvicorn[standard]
 python-multipart
