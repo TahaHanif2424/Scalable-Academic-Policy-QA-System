@@ -25,7 +25,10 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
         running = 0
         for idx, chunk in enumerate(chunks, start=1):
             text = chunk.get("text", "").strip().replace("\n", " ")
-            label = f"[Source {idx} | chunk_id={chunk['chunk_id']} | page {chunk.get('page_num', '?')}]"
+            label = (
+                f"[Source {idx} | chunk_id={chunk['chunk_id']} "
+                f"| page {chunk.get('page_num', '?')}]"
+            )
             entry = f"{label}\n{text}"
             if running + len(entry) > MAX_CONTEXT_CHARS:
                 break
@@ -33,11 +36,14 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
             running += len(entry)
         context_block = "\n\n".join(sections)
 
-    prompt = textwrap.dedent(f"""
+    prompt = textwrap.dedent(
+        f"""
         You are an academic policy assistant for NUST (National University of Sciences and Technology).
         Answer the student's question using ONLY the policy sections provided below.
         If the answer is not found in the provided sections, say:
-        "I could not find information about this in the provided policy documents. However, based on my general knowledge, and mention that this answer is not grounded in the provided sections."
+        "I could not find information about this in the provided policy documents.
+        However, based on my general knowledge, and mention that this answer is
+        not grounded in the provided sections."
 
         When you answer:
         - Be concise and direct.
@@ -51,7 +57,8 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
         Student question: {question}
 
         Answer:
-    """).strip()
+    """
+    ).strip()
 
     return prompt
 
@@ -113,7 +120,7 @@ def build_evidence(chunks: list[dict]) -> list[dict]:
                 "page_num": c.get("page_num"),
                 "source": c.get("source", "unknown"),
                 "score": round(c.get("score", 0.0), 4),
-                # first 300 chars as a readable snippet; full text available via /retrieve
+                # First 300 chars as a readable snippet.
                 "snippet": c.get("text", "")[:300].strip(),
             }
         )

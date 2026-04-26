@@ -99,3 +99,7 @@ curl -X POST "http://localhost:8000/process" \
 ├── requirements.txt
 └── README.md
 ```
+
+
+ruff check . --fix
+ruff format .

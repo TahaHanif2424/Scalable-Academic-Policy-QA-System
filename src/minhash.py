@@ -1,8 +1,6 @@
 import hashlib
-import random
 import re
 
-import numpy as np
 from nltk.corpus import stopwords
 
 from src.database import (
@@ -23,9 +21,9 @@ SHINGLE_SIZE = 2  # k — bigrams give better query↔chunk overlap than trigram
 LARGE_PRIME = 4294967311  # large prime for hash function mod
 STOP_WORDS = set(stopwords.words("english"))
 
-assert (
-    NUM_BANDS * ROWS_PER_BAND == NUM_HASH_FUNCTIONS
-), "NUM_BANDS * ROWS_PER_BAND must equal NUM_HASH_FUNCTIONS"
+assert NUM_BANDS * ROWS_PER_BAND == NUM_HASH_FUNCTIONS, (
+    "NUM_BANDS * ROWS_PER_BAND must equal NUM_HASH_FUNCTIONS"
+)
 
 
 def build_shingles(text: str, k: int = SHINGLE_SIZE) -> set[str]:

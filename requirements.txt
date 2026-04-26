@@ -3,6 +3,8 @@ pytest
 pdfplumber
 nltk
 black
+ruff
+autoflake
 isort
 pymongo
 python-dotenv

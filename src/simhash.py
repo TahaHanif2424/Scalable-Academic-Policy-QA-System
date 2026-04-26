@@ -7,7 +7,6 @@ from nltk.corpus import stopwords
 from src.database import (
     get_all_chunks,
     get_all_simhash_fingerprints,
-    get_chunks_by_ids,
     save_simhash_fingerprints,
 )
 
