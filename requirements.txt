@@ -6,3 +6,8 @@ black
 isort
 pymongo
 python-dotenv
+scikit-learn
+google-generativeai
+fastapi
+uvicorn[standard]
+python-multipart
