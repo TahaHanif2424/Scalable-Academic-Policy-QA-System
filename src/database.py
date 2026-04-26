@@ -1,7 +1,9 @@
+import json
 import os
 from datetime import datetime
-from pymongo import MongoClient, ASCENDING
+
 from dotenv import load_dotenv
+from pymongo import ASCENDING, MongoClient
 
 load_dotenv()
 
@@ -120,7 +122,9 @@ def save_simhash_fingerprints(fingerprints: dict[int, int]):
 
     if fingerprints:
         docs = [
-            {"chunk_id": chunk_id, "fingerprint": fp}
+            # Store as hex string — SimHash is an unsigned 64-bit int which
+            # exceeds MongoDB's signed 64-bit BSON int limit (2^63-1).
+            {"chunk_id": chunk_id, "fingerprint": format(fp, "016x")}
             for chunk_id, fp in fingerprints.items()
         ]
         db.simhash_fingerprints.insert_many(docs)
@@ -132,7 +136,8 @@ def get_all_simhash_fingerprints() -> dict[int, int]:
 
     db = get_db()
     docs = db.simhash_fingerprints.find({}, {"_id": 0})
-    return {doc["chunk_id"]: doc["fingerprint"] for doc in docs}
+    # Parse hex string back to int (handles unsigned 64-bit fingerprints).
+    return {doc["chunk_id"]: int(doc["fingerprint"], 16) for doc in docs}
 
 
 # ─── Query log ────────────────────────────────────────────────────────────────
@@ -167,3 +172,20 @@ def get_query_logs() -> list[dict]:
     db = get_db()
     logs = list(db.query_log.find({}, {"_id": 0}).sort("created_at", -1))
     return logs
+
+
+def save_hash_functions(hash_funcs: list[tuple[int, int]]):
+    """Saves the (a,b) hash function pairs used to build the index."""
+    db = get_db()
+    db.hash_functions.delete_many({})
+    db.hash_functions.insert_one({"functions": [[a, b] for a, b in hash_funcs]})
+    print(f"[database] Saved {len(hash_funcs)} hash functions")
+
+
+def get_hash_functions() -> list[tuple[int, int]]:
+    """Loads the exact same hash functions used during index build."""
+    db = get_db()
+    doc = db.hash_functions.find_one({}, {"_id": 0})
+    if not doc:
+        return []
+    return [(row[0], row[1]) for row in doc["functions"]]
