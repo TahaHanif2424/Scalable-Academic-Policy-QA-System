@@ -38,7 +38,8 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
 
     prompt = textwrap.dedent(
         f"""
-        You are an academic policy assistant for NUST (National University of Sciences and Technology).
+        You are an academic policy assistant for NUST
+        (National University of Sciences and Technology).
         Answer the student's question using ONLY the policy sections provided below.
         If the answer is not found in the provided sections, say:
         "I could not find information about this in the provided policy documents.
