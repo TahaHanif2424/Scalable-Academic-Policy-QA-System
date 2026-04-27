@@ -27,6 +27,7 @@ def _graph_rerank(seed_scores: list[float], candidate_matrix) -> list[float]:
     Build a chunk similarity graph over TF-IDF candidates and propagate relevance.
     This smooths local score noise and promotes chunks central to related evidence.
     """
+    # Run lightweight graph propagation over candidate similarities.
     n = len(seed_scores)
     if n <= 1:
         return seed_scores
@@ -56,6 +57,7 @@ def _graph_rerank(seed_scores: list[float], candidate_matrix) -> list[float]:
 
 # ─── Step 1: Build TF-IDF index ───────────────────────────────────────────────
 def build_tfidf_index():
+    # Fit and persist TF-IDF vectorizer/matrix for all chunks.
     print("[tfidf] Starting TF-IDF index build...")
 
     chunks = get_all_chunks()
@@ -95,6 +97,7 @@ def build_tfidf_index():
 
 # ─── Step 2: Load TF-IDF index from disk ─────────────────────────────────────
 def load_tfidf_index() -> dict:
+    # Load the saved TF-IDF index bundle from disk.
 
     if not os.path.exists(INDEX_PATH):
         print(
@@ -110,6 +113,7 @@ def load_tfidf_index() -> dict:
 
 # ─── Step 3: Query ───────────────────────────────────────────────────────────
 def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
+    # Score chunks by TF-IDF cosine and rerank with graph smoothing.
 
     index = load_tfidf_index()
     if index is None:
@@ -169,6 +173,7 @@ def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
 
 # ─── Step 4: Get top-k chunks with full text ─────────────────────────────────
 def query_tfidf_with_text(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
+    # Fetch full chunk payloads for top TF-IDF results.
 
     results = query_tfidf(query_text, top_k)
     chunk_ids = [r["chunk_id"] for r in results]
@@ -186,6 +191,7 @@ def query_tfidf_with_text(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[d
 
 # ─── Step 5: Get top keywords from TF-IDF for a chunk ────────────────────────
 def get_top_keywords(chunk_text: str, top_n: int = 10) -> list[tuple[str, float]]:
+    # Extract highest-weight TF-IDF terms for one chunk.
 
     index = load_tfidf_index()
     if index is None:

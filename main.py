@@ -32,10 +32,12 @@ TFIDF_INDEX_PATH = Path("index/tfidf_index.pkl")
 
 
 def _sha256_bytes(data: bytes) -> str:
+    # Generate a stable file fingerprint for cache reuse checks.
     return hashlib.sha256(data).hexdigest()
 
 
 def _cache_matches(file_hash: str) -> bool:
+    # Validate cache metadata against current upload and ingestion version.
     if not CACHE_META_PATH.exists():
         return False
 
@@ -51,6 +53,7 @@ def _cache_matches(file_hash: str) -> bool:
 
 
 def _tfidf_index_is_consistent(db) -> bool:
+    # Ensure on-disk TF-IDF index points to the same chunk IDs stored in MongoDB.
     if not TFIDF_INDEX_PATH.exists():
         return False
 
@@ -77,6 +80,7 @@ def _tfidf_index_is_consistent(db) -> bool:
 
 
 def _indexes_ready() -> bool:
+    # Confirm all retrieval indexes are present and internally consistent.
     db = get_db()
     return (
         db.chunks.count_documents({}) > 0
@@ -87,6 +91,7 @@ def _indexes_ready() -> bool:
 
 
 def _write_cache_metadata(file_hash: str, filename: str, chunks_saved: int) -> None:
+    # Persist cache metadata so repeated runs can skip expensive rebuilds.
     CACHE_META_PATH.parent.mkdir(parents=True, exist_ok=True)
     CACHE_META_PATH.write_text(
         json.dumps(
@@ -104,6 +109,7 @@ def _write_cache_metadata(file_hash: str, filename: str, chunks_saved: int) -> N
 
 @app.get("/health")
 def health() -> dict:
+    # Lightweight heartbeat endpoint.
     return {"status": "ok"}
 
 
@@ -113,6 +119,7 @@ def query_patterns(
     max_itemset_size: int = Query(3, ge=1, le=5),
     top_n: int = Query(20, ge=1, le=100),
 ) -> dict:
+    # Return mined frequent term sets from historical user queries.
     return {
         "status": "ok",
         "insight": "frequent_query_itemsets",
@@ -130,6 +137,7 @@ async def process_pdf_and_answer(
     question: str = Form(...),
     top_k: int = Form(5),
 ) -> dict:
+    # Orchestrate ingestion/indexing, retrieval, generation, and response assembly.
     if not question.strip():
         raise HTTPException(status_code=400, detail="question is required")
     if top_k < 1:

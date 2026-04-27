@@ -27,6 +27,7 @@ assert NUM_BANDS * ROWS_PER_BAND == NUM_HASH_FUNCTIONS, (
 
 
 def build_shingles(text: str, k: int = SHINGLE_SIZE) -> set[str]:
+    # Convert text into normalized k-shingles for MinHash.
     text = re.sub(r"[^\w\s]", "", text.lower())
     words = text.split()
     words = [w for w in words if w not in STOP_WORDS]
@@ -41,10 +42,12 @@ def build_shingles(text: str, k: int = SHINGLE_SIZE) -> set[str]:
 
 
 def shingle_to_int(shingle: str) -> int:
+    # Deterministically hash a shingle into an integer domain.
     return int(hashlib.sha256(shingle.encode("utf-8")).hexdigest(), 16)
 
 
 def generate_hash_functions(n: int, prime: int = LARGE_PRIME) -> list[tuple[int, int]]:
+    # Build deterministic universal hash functions used by MinHash signatures.
     hash_funcs = []
     for i in range(n):
         a_bytes = hashlib.sha256(f"hash_a_{i}".encode()).digest()
@@ -58,6 +61,7 @@ def generate_hash_functions(n: int, prime: int = LARGE_PRIME) -> list[tuple[int,
 def compute_minhash_signature(
     shingles: set[str], hash_funcs: list[tuple[int, int]], prime: int = LARGE_PRIME
 ) -> list[int]:
+    # Compute the MinHash signature vector for one shingle set.
     shingle_ints = [shingle_to_int(s) for s in shingles]
 
     if not shingle_ints:
@@ -76,6 +80,7 @@ def build_lsh_buckets(
     num_bands: int | None = None,
     rows_per_band: int | None = None,
 ) -> dict[str, list[int]]:
+    # Group signature bands into bucket keys for fast candidate lookup.
     if num_bands is None:
         num_bands = NUM_BANDS
     if rows_per_band is None:
@@ -101,6 +106,7 @@ def build_lsh_buckets(
 
 
 def jaccard_from_signatures(sig_a: list[int], sig_b: list[int]) -> float:
+    # Estimate Jaccard similarity via signature agreement ratio.
     if len(sig_a) != len(sig_b):
         return 0.0
     matches = sum(1 for a, b in zip(sig_a, sig_b) if a == b)
@@ -108,6 +114,7 @@ def jaccard_from_signatures(sig_a: list[int], sig_b: list[int]) -> float:
 
 
 def build_minhash_index():
+    # Build and persist signatures plus LSH buckets for all stored chunks.
     print("[minhash] Starting MinHash index build...")
 
     if NUM_BANDS <= 0 or NUM_HASH_FUNCTIONS <= 0:
@@ -155,6 +162,7 @@ def build_minhash_index():
 
 
 def query_minhash(query_text: str, top_k: int = 5) -> list[dict]:
+    # Retrieve top-k similar chunks using MinHash + LSH candidate filtering.
     # Load the exact same hash functions used during index build
     hash_funcs = get_hash_functions()
     if not hash_funcs:

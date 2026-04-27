@@ -16,6 +16,7 @@ STOP_WORDS = set(stopwords.words("english"))
 
 
 def tokenize(text: str) -> dict[str, int]:
+    # Normalize text and build weighted term frequencies.
     text = re.sub(r"[^\w\s]", "", text.lower())
     words = text.split()
     words = [w for w in words if w not in STOP_WORDS]
@@ -25,11 +26,13 @@ def tokenize(text: str) -> dict[str, int]:
 
 
 def hash_word(word: str, bits: int = FINGERPRINT_BITS) -> int:
+    # Hash a token into a fixed-width bit representation.
     digest = hashlib.sha256(word.encode("utf-8")).digest()
     return int.from_bytes(digest[: bits // 8], "big")
 
 
 def compute_simhash(text: str, bits: int = FINGERPRINT_BITS) -> int:
+    # Project weighted token hashes into a single SimHash fingerprint.
     word_weights = tokenize(text)
 
     if not word_weights:
@@ -56,18 +59,21 @@ def compute_simhash(text: str, bits: int = FINGERPRINT_BITS) -> int:
 
 
 def hamming_distance(fp_a: int, fp_b: int) -> int:
+    # Count differing bits between two fingerprints.
 
     xor = fp_a ^ fp_b
     return bin(xor).count("1")
 
 
 def hamming_similarity(fp_a: int, fp_b: int, bits: int = FINGERPRINT_BITS) -> float:
+    # Convert Hamming distance into a normalized similarity score.
 
     distance = hamming_distance(fp_a, fp_b)
     return 1.0 - (distance / bits)
 
 
 def build_simhash_index():
+    # Compute and persist one SimHash fingerprint per chunk.
 
     print("[simhash] Starting SimHash index build...")
 
@@ -92,6 +98,7 @@ def build_simhash_index():
 
 
 def query_simhash(query_text: str, top_k: int = 5) -> list[dict]:
+    # Retrieve top-k chunks using query fingerprint proximity.
 
     # step 1: fingerprint the query
     query_fp = compute_simhash(query_text)

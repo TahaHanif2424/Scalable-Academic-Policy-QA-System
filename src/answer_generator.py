@@ -19,6 +19,7 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
     Build a grounded prompt from evidence chunks.
     Each chunk is numbered so the LLM can cite it easily.
     """
+    # Assemble a bounded context block from retrieved evidence chunks.
     if not chunks:
         context_block = "[No relevant policy sections were retrieved.]"
     else:
@@ -67,6 +68,7 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
 
 
 def _call_groq(prompt: str) -> tuple[str, str]:
+    # Send prompt to Groq chat completion API and return text + model used.
     try:
         from groq import Groq  # lazy import
 
@@ -96,6 +98,7 @@ def _call_groq(prompt: str) -> tuple[str, str]:
 
 def _fallback_answer(question: str, chunks: list[dict]) -> str:
     """Return a no-LLM answer using the top chunk's text directly."""
+    # Provide deterministic output when no API key is configured.
     if not chunks:
         return "No relevant policy sections were found for your question."
     top = chunks[0]
@@ -115,6 +118,7 @@ def build_evidence(chunks: list[dict]) -> list[dict]:
     Convert raw chunk dicts into clean evidence records for the API response.
     Keeps only what the consumer needs — avoids dumping 10 KB of text per chunk.
     """
+    # Normalize chunk metadata into a compact evidence schema.
     evidence = []
     for idx, c in enumerate(chunks, start=1):
         evidence.append(
@@ -132,6 +136,7 @@ def build_evidence(chunks: list[dict]) -> list[dict]:
 
 
 def generate_answer(question: str, chunks: list[dict]) -> dict:
+    # Produce final answer payload using Groq or fallback mode.
 
     evidence = build_evidence(chunks)
 

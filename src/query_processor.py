@@ -23,6 +23,7 @@ else:
 
 def _enrich(results: list[dict], source: str) -> list[dict]:
     """Fetch full chunk text and tag each result with its retrieval source."""
+    # Join retrieval IDs with stored chunk metadata/text.
     if not results:
         return []
 
@@ -48,6 +49,7 @@ def _enrich(results: list[dict], source: str) -> list[dict]:
 
 def _timed(fn, *args, **kwargs):
     """Run fn(*args, **kwargs), return (result, elapsed_ms)."""
+    # Measure wall-clock runtime of a retrieval call.
     t0 = time.perf_counter()
     result = fn(*args, **kwargs)
     return result, (time.perf_counter() - t0) * 1000
@@ -55,6 +57,7 @@ def _timed(fn, *args, **kwargs):
 
 def _timed_with_memory(fn, *args, **kwargs):
     """Run fn(*args, **kwargs), return (result, elapsed_ms, peak_memory_kb)."""
+    # Capture both runtime and peak traced memory for comparisons.
     tracemalloc.start()
     t0 = time.perf_counter()
     result = fn(*args, **kwargs)
@@ -68,6 +71,7 @@ def _hybrid_approximate(
     lsh_chunks: list[dict], sim_chunks: list[dict], top_k: int
 ) -> list[dict]:
     """Fuse MinHash+SimHash results into one approximate path ranking."""
+    # Weighted late-fusion of LSH and SimHash candidate rankings.
     if not lsh_chunks and not sim_chunks:
         return []
 
@@ -96,6 +100,7 @@ def _hybrid_approximate(
 
 def _overlap_metrics(a_chunks: list[dict], b_chunks: list[dict]) -> dict:
     """Proxy relevance comparison between methods using overlap-at-k."""
+    # Compute set-overlap diagnostics between two retrieval outputs.
     a_ids = [c["chunk_id"] for c in a_chunks]
     b_ids = [c["chunk_id"] for c in b_chunks]
 
@@ -119,6 +124,7 @@ def retrieve_lsh(query: str, top_k: int = 5) -> tuple[list[dict], float]:
     LSH/MinHash retrieval.
     Returns (enriched_chunks, elapsed_ms).
     """
+    # Run MinHash retrieval then attach full chunk payloads.
     raw, ms = _timed(query_minhash, query, top_k)
     return _enrich(raw, "lsh"), ms
 
@@ -128,6 +134,7 @@ def retrieve_simhash(query: str, top_k: int = 5) -> tuple[list[dict], float]:
     SimHash retrieval.
     Returns (enriched_chunks, elapsed_ms).
     """
+    # Run SimHash retrieval then attach full chunk payloads.
     raw, ms = _timed(query_simhash, query, top_k)
     return _enrich(raw, "simhash"), ms
 
@@ -137,11 +144,13 @@ def retrieve_tfidf(query: str, top_k: int = 5) -> tuple[list[dict], float]:
     TF-IDF (baseline) retrieval.
     Returns (enriched_chunks, elapsed_ms).
     """
+    # Run TF-IDF retrieval then attach full chunk payloads.
     raw, ms = _timed(query_tfidf, query, top_k)
     return _enrich(raw, "tfidf"), ms
 
 
 def retrieve_all(query: str, top_k: int = 5) -> dict:
+    # Execute all retrieval paths and return a unified comparison payload.
     # Path A (approximate): MinHash + SimHash hybrid
     (lsh_chunks, _lsh_inner_ms), lsh_ms, lsh_mem_kb = _timed_with_memory(
         retrieve_lsh, query, top_k
