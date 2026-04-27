@@ -6,6 +6,8 @@ import tracemalloc
 # ── allow both `python -m src.query_processor` (root) and
 #    `python query_processor.py` (from inside src/)  ──────────────────────────
 if __name__ == "__main__" and __package__ is None:
+    # Running directly from inside src/ — add the directory to sys.path so
+    # sibling modules can be imported without the src. prefix
     sys.path.insert(0, os.path.dirname(__file__))
     from database import get_chunks_by_ids
     from minhash import query_minhash
@@ -28,6 +30,7 @@ def _enrich(results: list[dict], source: str) -> list[dict]:
         return []
 
     chunk_ids = [r["chunk_id"] for r in results]
+    # Fetch all chunks in one DB call and key by chunk_id for O(1) lookup below
     chunks = {c["chunk_id"]: c for c in get_chunks_by_ids(chunk_ids)}
 
     enriched = []
@@ -41,6 +44,7 @@ def _enrich(results: list[dict], source: str) -> list[dict]:
                 "text": chunk.get("text", ""),
                 "source": source,
                 # normalise score field name across methods
+                # different retrievers use different key names — coalesce to "score"
                 "score": r.get("score") or r.get("similarity") or 0.0,
             }
         )
@@ -62,6 +66,7 @@ def _timed_with_memory(fn, *args, **kwargs):
     t0 = time.perf_counter()
     result = fn(*args, **kwargs)
     elapsed_ms = (time.perf_counter() - t0) * 1000
+    # get_traced_memory returns (current, peak); we only care about peak
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     return result, elapsed_ms, peak / 1024.0
@@ -75,11 +80,16 @@ def _hybrid_approximate(
     if not lsh_chunks and not sim_chunks:
         return []
 
+    # Normalise each method's scores independently before blending so that
+    # differences in raw score magnitude don't bias the fusion
     lsh_max = max((c["score"] for c in lsh_chunks), default=1.0) or 1.0
     sim_max = max((c["score"] for c in sim_chunks), default=1.0) or 1.0
 
+    # fused accumulates weighted scores keyed by chunk_id; a chunk can appear
+    # in both lists and will receive contributions from both methods
     fused: dict[int, dict] = {}
 
+    # LSH carries more weight (0.6) as MinHash similarity is the primary signal
     for c in lsh_chunks:
         cid = c["chunk_id"]
         score = 0.6 * (c["score"] / lsh_max)
@@ -87,6 +97,7 @@ def _hybrid_approximate(
             fused[cid] = {**c, "source": "approx_hybrid", "score": 0.0}
         fused[cid]["score"] += score
 
+    # SimHash contributes a smaller weight (0.4) as a complementary signal
     for c in sim_chunks:
         cid = c["chunk_id"]
         score = 0.4 * (c["score"] / sim_max)
@@ -108,10 +119,12 @@ def _overlap_metrics(a_chunks: list[dict], b_chunks: list[dict]) -> dict:
     b_set = set(b_ids)
     intersection = len(a_set & b_set)
     union = len(a_set | b_set)
+    # k is the length of the longer list so the metric penalises size mismatches
     k = max(len(a_chunks), len(b_chunks), 1)
 
     return {
         "overlap_at_k": round(intersection / k, 4),
+        # Jaccard is undefined when both sets are empty — guard with `if union`
         "jaccard_at_k": round(intersection / union, 4) if union else 0.0,
     }
 
@@ -151,7 +164,10 @@ def retrieve_tfidf(query: str, top_k: int = 5) -> tuple[list[dict], float]:
 
 def retrieve_all(query: str, top_k: int = 5) -> dict:
     # Execute all retrieval paths and return a unified comparison payload.
+
     # Path A (approximate): MinHash + SimHash hybrid
+    # Each retriever is wrapped in _timed_with_memory so we get both latency
+    # and peak allocation figures for the comparison payload
     (lsh_chunks, _lsh_inner_ms), lsh_ms, lsh_mem_kb = _timed_with_memory(
         retrieve_lsh, query, top_k
     )
@@ -166,9 +182,11 @@ def retrieve_all(query: str, top_k: int = 5) -> dict:
     )
 
     # Final answer path (for UI): exact baseline by default
+    # TF-IDF is preferred for generation because its scores are more calibrated
     selected_method = "exact_tfidf"
     selected_chunks = tfidf_chunks
 
+    # Overlap metrics give a quick proxy for how much the two paths agree
     comparison = _overlap_metrics(approx_chunks, tfidf_chunks)
 
     return {
@@ -176,6 +194,7 @@ def retrieve_all(query: str, top_k: int = 5) -> dict:
         "approximate": {
             "method": "lsh_hybrid_minhash_simhash",
             "chunks": approx_chunks,
+            # Sum the two approximate method times for a combined latency figure
             "time_ms": round(lsh_ms + sim_ms, 2),
             "memory_kb": round(lsh_mem_kb + sim_mem_kb, 2),
             "components": {
