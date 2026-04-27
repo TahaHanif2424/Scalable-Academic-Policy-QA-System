@@ -10,23 +10,33 @@ from src.database import (
     save_simhash_fingerprints,
 )
 
+# Number of bits in each SimHash fingerprint — 64 bits balances precision and storage
 FINGERPRINT_BITS = 64
+# Maximum Hamming distance to consider two chunks "similar" — tunable sensitivity knob
 HAMMING_THRESHOLD = 5
 STOP_WORDS = set(stopwords.words("english"))
 
 
 def tokenize(text: str) -> dict[str, int]:
     # Normalize text and build weighted term frequencies.
+
+    # Strip punctuation and lowercase to reduce surface variation
     text = re.sub(r"[^\w\s]", "", text.lower())
     words = text.split()
+
+    # Remove stop words — high-frequency function words dilute topical signal
     words = [w for w in words if w not in STOP_WORDS]
 
+    # Drop very short tokens (1-2 chars) that are unlikely to carry meaning
     words = [w for w in words if len(w) > 2]
     return dict(Counter(words))
 
 
 def hash_word(word: str, bits: int = FINGERPRINT_BITS) -> int:
     # Hash a token into a fixed-width bit representation.
+
+    # SHA-256 produces 32 bytes; we take only the first `bits/8` bytes so the
+    # result fits exactly in a `bits`-wide integer used for fingerprint projection
     digest = hashlib.sha256(word.encode("utf-8")).digest()
     return int.from_bytes(digest[: bits // 8], "big")
 
@@ -35,14 +45,18 @@ def compute_simhash(text: str, bits: int = FINGERPRINT_BITS) -> int:
     # Project weighted token hashes into a single SimHash fingerprint.
     word_weights = tokenize(text)
 
+    # Empty documents get a zero fingerprint — they will appear maximally distant
     if not word_weights:
         return 0
 
+    # Accumulator vector: one float per bit position
     vector = [0.0] * bits
 
     for word, weight in word_weights.items():
         word_hash = hash_word(word, bits)
 
+        # For each bit position, add the token's weight if the bit is 1,
+        # subtract it if the bit is 0 — this is the core SimHash projection step
         for i in range(bits):
             bit = (word_hash >> (bits - 1 - i)) & 1
             if bit == 1:
@@ -50,6 +64,7 @@ def compute_simhash(text: str, bits: int = FINGERPRINT_BITS) -> int:
             else:
                 vector[i] -= weight
 
+    # Collapse the float vector to a single integer: bit=1 where vector[i] > 0
     fingerprint = 0
     for i in range(bits):
         if vector[i] > 0:
@@ -61,6 +76,8 @@ def compute_simhash(text: str, bits: int = FINGERPRINT_BITS) -> int:
 def hamming_distance(fp_a: int, fp_b: int) -> int:
     # Count differing bits between two fingerprints.
 
+    # XOR isolates the positions where the two fingerprints disagree;
+    # counting 1-bits in the result gives the Hamming distance
     xor = fp_a ^ fp_b
     return bin(xor).count("1")
 
@@ -68,6 +85,8 @@ def hamming_distance(fp_a: int, fp_b: int) -> int:
 def hamming_similarity(fp_a: int, fp_b: int, bits: int = FINGERPRINT_BITS) -> float:
     # Convert Hamming distance into a normalized similarity score.
 
+    # Dividing by total bits maps distance into [0, 1] and inverting gives
+    # similarity: 1.0 = identical fingerprints, 0.0 = all bits differ
     distance = hamming_distance(fp_a, fp_b)
     return 1.0 - (distance / bits)
 
@@ -90,6 +109,7 @@ def build_simhash_index():
         fp = compute_simhash(chunk["text"])
         fingerprints[chunk["chunk_id"]] = fp
 
+        # Periodic progress logging for long-running index builds
         if (i + 1) % 50 == 0:
             print(f"[simhash]   {i + 1}/{len(chunks)} fingerprints computed...")
 
