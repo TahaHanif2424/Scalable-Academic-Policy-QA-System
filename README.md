@@ -106,3 +106,5 @@ curl -X POST "http://localhost:8000/process" \
 
 ruff check . --fix
 ruff format .
+
+Invoke-RestMethod -Uri "http://localhost:8000/insights/query-patterns?min_support=0.2&max_itemset_size=3&top_n=20" -Method Get

@@ -1,0 +1,50 @@
+[
+  {
+    "question": "How many times can a course be repeated?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is the minimum CGPA required for graduation?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is the attendance requirement for appearing in final exams?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What happens if a student gets an F grade in a core course?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "Can a student improve a grade after passing a course?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What are the credit hour limits per semester?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is the policy for probation and dismissal?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "How is semester GPA calculated?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is the process for course withdrawal?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "Is there a policy for transfer of credits from another university?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is the policy on plagiarism or academic misconduct?",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "Can a final exam be retaken if missed due to medical reasons?",
+    "relevant_chunk_ids": []
+  }
+]

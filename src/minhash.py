@@ -73,9 +73,14 @@ def compute_minhash_signature(
 
 def build_lsh_buckets(
     signatures: dict[int, list[int]],
-    num_bands: int = NUM_BANDS,
-    rows_per_band: int = ROWS_PER_BAND,
+    num_bands: int | None = None,
+    rows_per_band: int | None = None,
 ) -> dict[str, list[int]]:
+    if num_bands is None:
+        num_bands = NUM_BANDS
+    if rows_per_band is None:
+        rows_per_band = ROWS_PER_BAND
+
     buckets = {}
 
     for chunk_id, signature in signatures.items():
@@ -105,6 +110,13 @@ def jaccard_from_signatures(sig_a: list[int], sig_b: list[int]) -> float:
 def build_minhash_index():
     print("[minhash] Starting MinHash index build...")
 
+    if NUM_BANDS <= 0 or NUM_HASH_FUNCTIONS <= 0:
+        raise ValueError("NUM_HASH_FUNCTIONS and NUM_BANDS must be positive")
+    if NUM_HASH_FUNCTIONS % NUM_BANDS != 0:
+        raise ValueError("NUM_HASH_FUNCTIONS must be divisible by NUM_BANDS")
+
+    rows_per_band = NUM_HASH_FUNCTIONS // NUM_BANDS
+
     chunks = get_all_chunks()
     if not chunks:
         print("[minhash] No chunks found in MongoDB. Run ingestion first.")
@@ -132,7 +144,11 @@ def build_minhash_index():
     save_minhash_signatures(signatures)
 
     print("[minhash] Building LSH buckets...")
-    buckets = build_lsh_buckets(signatures)
+    buckets = build_lsh_buckets(
+        signatures,
+        num_bands=NUM_BANDS,
+        rows_per_band=rows_per_band,
+    )
     save_lsh_buckets(buckets)
 
     print(f"[minhash] Done. {len(signatures)} signatures, {len(buckets)} buckets")

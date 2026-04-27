@@ -5,14 +5,14 @@ import tempfile
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.answer_generator import generate_answer
-from src.data_ingestion import ingest_pdf
-from src.data_ingestion import INGESTION_VERSION
-from src.database import get_db, init_db, save_chunks
+from src.data_ingestion import INGESTION_VERSION, ingest_pdf
+from src.database import get_db, init_db, log_query, save_chunks
 from src.minhash import build_minhash_index
+from src.query_patterns import mine_frequent_query_itemsets
 from src.query_processor import retrieve_all
 from src.simhash import build_simhash_index
 from src.tfidf import build_tfidf_index
@@ -107,6 +107,23 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/insights/query-patterns")
+def query_patterns(
+    min_support: float = Query(0.2, ge=0.01, le=1.0),
+    max_itemset_size: int = Query(3, ge=1, le=5),
+    top_n: int = Query(20, ge=1, le=100),
+) -> dict:
+    return {
+        "status": "ok",
+        "insight": "frequent_query_itemsets",
+        "data": mine_frequent_query_itemsets(
+            min_support=min_support,
+            max_itemset_size=max_itemset_size,
+            top_n=top_n,
+        ),
+    }
+
+
 @app.post("/process")
 async def process_pdf_and_answer(
     file: UploadFile | None = File(None),
@@ -172,6 +189,21 @@ async def process_pdf_and_answer(
         lsh_minhash_output = components.get("lsh", {"chunks": []})
         simhash_output = components.get("simhash", {"chunks": []})
         tfidf_output = retrieval.get("exact", {"chunks": []})
+
+        log_query(
+            question=question,
+            answer=generation["answer"],
+            lsh_chunks=[
+                c.get("chunk_id") for c in lsh_minhash_output.get("chunks", [])
+            ],
+            simhash_chunks=[
+                c.get("chunk_id") for c in simhash_output.get("chunks", [])
+            ],
+            tfidf_chunks=[c.get("chunk_id") for c in tfidf_output.get("chunks", [])],
+            lsh_time_ms=float(lsh_minhash_output.get("time_ms", 0.0) or 0.0),
+            simhash_time_ms=float(simhash_output.get("time_ms", 0.0) or 0.0),
+            tfidf_time_ms=float(tfidf_output.get("time_ms", 0.0) or 0.0),
+        )
 
         return {
             "status": "ok",
