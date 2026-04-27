@@ -19,6 +19,7 @@ from src.tfidf import build_tfidf_index
 
 app = FastAPI(title="Academic Policy QA", version="1.0.0")
 
+# Allow all origins so the frontend can call this API regardless of where it's hosted
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Paths are centralised here so every function references the same locations
 CACHE_META_PATH = Path("index/active_document.json")
 TFIDF_INDEX_PATH = Path("index/tfidf_index.pkl")
 
@@ -38,14 +40,19 @@ def _sha256_bytes(data: bytes) -> str:
 
 def _cache_matches(file_hash: str) -> bool:
     # Validate cache metadata against current upload and ingestion version.
+
+    # No metadata file means nothing has been cached yet
     if not CACHE_META_PATH.exists():
         return False
 
     try:
         payload = json.loads(CACHE_META_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
+        # Corrupted or unreadable metadata — treat as a cache miss
         return False
 
+    # Both the file content and the ingestion pipeline version must match;
+    # a pipeline upgrade should force a full re-ingest even for the same PDF
     return (
         payload.get("file_hash") == file_hash
         and payload.get("ingestion_version") == INGESTION_VERSION
@@ -54,6 +61,8 @@ def _cache_matches(file_hash: str) -> bool:
 
 def _tfidf_index_is_consistent(db) -> bool:
     # Ensure on-disk TF-IDF index points to the same chunk IDs stored in MongoDB.
+
+    # No index file on disk means it hasn't been built yet
     if not TFIDF_INDEX_PATH.exists():
         return False
 
@@ -61,20 +70,24 @@ def _tfidf_index_is_consistent(db) -> bool:
         with open(TFIDF_INDEX_PATH, "rb") as f:
             index = pickle.load(f)
     except (OSError, pickle.PickleError, EOFError):
+        # Corrupted pickle — consider the index stale
         return False
 
     chunk_ids = index.get("chunk_ids") if isinstance(index, dict) else None
     if not isinstance(chunk_ids, list) or not chunk_ids:
         return False
 
+    # Duplicates in chunk_ids would indicate a corrupted index build
     unique_ids = sorted(set(chunk_ids))
     if len(unique_ids) != len(chunk_ids):
         return False
 
+    # The number of chunks in the index must exactly match what's in MongoDB
     db_count = db.chunks.count_documents({})
     if db_count != len(unique_ids):
         return False
 
+    # Every chunk ID in the index must resolve to an actual MongoDB document
     matched = db.chunks.count_documents({"chunk_id": {"$in": unique_ids}})
     return matched == len(unique_ids)
 
@@ -92,6 +105,8 @@ def _indexes_ready() -> bool:
 
 def _write_cache_metadata(file_hash: str, filename: str, chunks_saved: int) -> None:
     # Persist cache metadata so repeated runs can skip expensive rebuilds.
+
+    # Create the index directory if it doesn't exist yet
     CACHE_META_PATH.parent.mkdir(parents=True, exist_ok=True)
     CACHE_META_PATH.write_text(
         json.dumps(
@@ -138,6 +153,8 @@ async def process_pdf_and_answer(
     top_k: int = Form(5),
 ) -> dict:
     # Orchestrate ingestion/indexing, retrieval, generation, and response assembly.
+
+    # Validate inputs before doing any expensive work
     if not question.strip():
         raise HTTPException(status_code=400, detail="question is required")
     if top_k < 1:
@@ -155,6 +172,7 @@ async def process_pdf_and_answer(
                     status_code=400,
                     detail="No indexed document found. Upload a PDF first.",
                 )
+            # Reuse existing indexes — no ingestion or rebuild needed
             chunks_saved = get_db().chunks.count_documents({})
             index_rebuilt = False
         else:
@@ -168,9 +186,11 @@ async def process_pdf_and_answer(
             file_hash = _sha256_bytes(file_bytes)
 
             if _cache_matches(file_hash) and _indexes_ready():
+                # Same file and same pipeline version — skip ingestion entirely
                 chunks_saved = get_db().chunks.count_documents({})
                 index_rebuilt = False
             else:
+                # Write to a temp file so ingest_pdf can read it from disk
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                     tmp.write(file_bytes)
                     tmp_path = Path(tmp.name)
@@ -178,6 +198,7 @@ async def process_pdf_and_answer(
                 chunks = ingest_pdf(tmp_path)
                 save_chunks(chunks)
 
+                # Rebuild all three retrieval indexes after fresh ingestion
                 build_minhash_index()
                 build_simhash_index()
                 build_tfidf_index()
@@ -186,18 +207,21 @@ async def process_pdf_and_answer(
                 index_rebuilt = True
                 _write_cache_metadata(file_hash, file.filename, chunks_saved)
 
+        # Run all retrieval methods and let the query processor select the best result
         retrieval = retrieve_all(question, top_k=top_k)
         selected = retrieval["selected_for_generation"]
         selected_chunks = selected["chunks"]
         top_chunks = selected_chunks[:top_k]
         generation = generate_answer(question, selected_chunks)
 
+        # Unpack per-method outputs for logging and response construction
         approximate = retrieval.get("approximate", {})
         components = approximate.get("components", {})
         lsh_minhash_output = components.get("lsh", {"chunks": []})
         simhash_output = components.get("simhash", {"chunks": []})
         tfidf_output = retrieval.get("exact", {"chunks": []})
 
+        # Persist the query and its results for later pattern mining
         log_query(
             question=question,
             answer=generation["answer"],
@@ -234,6 +258,7 @@ async def process_pdf_and_answer(
             "evidence": generation["evidence"],
         }
     finally:
+        # Always clean up the temp file even if an exception was raised above
         if tmp_path and tmp_path.exists():
             tmp_path.unlink()
 
