@@ -1,0 +1,10 @@
+metric,value
+tfidf_build_time_s,0.036945343017578125
+lsh_build_time_s,0.4265601634979248
+tfidf_index_rss,116068352
+lsh_index_rss,116953088
+queries,12
+tfidf_avg_query_s,0.0
+lsh_avg_query_s,0.0
+recall_at_k_mean,0.0
+overlap_mean,0.0

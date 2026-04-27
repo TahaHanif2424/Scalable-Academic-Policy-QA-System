@@ -1,0 +1,79 @@
+{
+  "summary": {
+    "query_count": 12,
+    "successful_queries": 0,
+    "k": 5,
+    "avg_precision_at_k_tfidf": null,
+    "avg_recall_at_k_tfidf": null,
+    "avg_precision_at_k_simhash": null,
+    "avg_recall_at_k_simhash": null,
+    "avg_precision_at_k_lsh_minhash": null,
+    "avg_recall_at_k_lsh_minhash": null,
+    "avg_latency_ms_end_to_end": null,
+    "avg_latency_ms_tfidf": null,
+    "avg_latency_ms_simhash": null,
+    "avg_latency_ms_lsh_minhash": null
+  },
+  "rows": [
+    {
+      "query_index": 1,
+      "question": "How many times can a course be repeated?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 2,
+      "question": "What is the minimum CGPA required for graduation?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 3,
+      "question": "What is the attendance requirement for appearing in final exams?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 4,
+      "question": "What happens if a student gets an F grade in a core course?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 5,
+      "question": "Can a student improve a grade after passing a course?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 6,
+      "question": "What are the credit hour limits per semester?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 7,
+      "question": "What is the policy for probation and dismissal?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 8,
+      "question": "How is semester GPA calculated?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 9,
+      "question": "What is the process for course withdrawal?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 10,
+      "question": "Is there a policy for transfer of credits from another university?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    },
+    {
+      "query_index": 11,
+      "question": "What is the policy on plagiarism or academic misconduct?",
+      "error": "[WinError 10054] An existing connection was forcibly closed by the remote host"
+    },
+    {
+      "query_index": 12,
+      "question": "Can a final exam be retaken if missed due to medical reasons?",
+      "error": "HTTP 404: {\"detail\":\"Not Found\"}"
+    }
+  ]
+}

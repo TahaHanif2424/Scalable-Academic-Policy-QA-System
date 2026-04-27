@@ -1,0 +1,13 @@
+query_index,question,precision_at_k_tfidf,recall_at_k_tfidf,precision_at_k_simhash,recall_at_k_simhash,precision_at_k_lsh_minhash,recall_at_k_lsh_minhash,latency_ms_end_to_end,latency_ms_tfidf,latency_ms_simhash,latency_ms_lsh_minhash,selected_method,error
+1,How many times can a course be repeated?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+2,What is the minimum CGPA required for graduation?,,,,,,,,,,,,[WinError 10054] An existing connection was forcibly closed by the remote host
+3,What is the attendance requirement for appearing in final exams?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+4,What happens if a student gets an F grade in a core course?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+5,Can a student improve a grade after passing a course?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+6,What are the credit hour limits per semester?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+7,What is the policy for probation and dismissal?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+8,How is semester GPA calculated?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+9,What is the process for course withdrawal?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+10,Is there a policy for transfer of credits from another university?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+11,What is the policy on plagiarism or academic misconduct?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
+12,Can a final exam be retaken if missed due to medical reasons?,,,,,,,,,,,,"HTTP 404: {""detail"":""Not Found""}"
