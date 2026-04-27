@@ -11,7 +11,6 @@ from src.minhash import build_minhash_index
 from src.query_processor import retrieve_lsh, retrieve_simhash, retrieve_tfidf
 from src.simhash import build_simhash_index
 
-
 DEFAULT_TOP_K = 5
 DEFAULT_OUTPUT_DIR = Path("reports")
 
