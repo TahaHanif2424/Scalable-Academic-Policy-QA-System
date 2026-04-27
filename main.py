@@ -1,5 +1,6 @@
 import hashlib
 import json
+import pickle
 import tempfile
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.answer_generator import generate_answer
 from src.data_ingestion import ingest_pdf
+from src.data_ingestion import INGESTION_VERSION
 from src.database import get_db, init_db, save_chunks
 from src.minhash import build_minhash_index
 from src.query_processor import retrieve_all
@@ -42,7 +44,36 @@ def _cache_matches(file_hash: str) -> bool:
     except (json.JSONDecodeError, OSError):
         return False
 
-    return payload.get("file_hash") == file_hash
+    return (
+        payload.get("file_hash") == file_hash
+        and payload.get("ingestion_version") == INGESTION_VERSION
+    )
+
+
+def _tfidf_index_is_consistent(db) -> bool:
+    if not TFIDF_INDEX_PATH.exists():
+        return False
+
+    try:
+        with open(TFIDF_INDEX_PATH, "rb") as f:
+            index = pickle.load(f)
+    except (OSError, pickle.PickleError, EOFError):
+        return False
+
+    chunk_ids = index.get("chunk_ids") if isinstance(index, dict) else None
+    if not isinstance(chunk_ids, list) or not chunk_ids:
+        return False
+
+    unique_ids = sorted(set(chunk_ids))
+    if len(unique_ids) != len(chunk_ids):
+        return False
+
+    db_count = db.chunks.count_documents({})
+    if db_count != len(unique_ids):
+        return False
+
+    matched = db.chunks.count_documents({"chunk_id": {"$in": unique_ids}})
+    return matched == len(unique_ids)
 
 
 def _indexes_ready() -> bool:
@@ -51,7 +82,7 @@ def _indexes_ready() -> bool:
         db.chunks.count_documents({}) > 0
         and db.minhash_signatures.count_documents({}) > 0
         and db.simhash_fingerprints.count_documents({}) > 0
-        and TFIDF_INDEX_PATH.exists()
+        and _tfidf_index_is_consistent(db)
     )
 
 
@@ -63,6 +94,7 @@ def _write_cache_metadata(file_hash: str, filename: str, chunks_saved: int) -> N
                 "file_hash": file_hash,
                 "filename": filename,
                 "chunks_saved": chunks_saved,
+                "ingestion_version": INGESTION_VERSION,
             },
             indent=2,
         ),
@@ -135,12 +167,21 @@ async def process_pdf_and_answer(
         top_chunks = selected_chunks[:top_k]
         generation = generate_answer(question, selected_chunks)
 
+        approximate = retrieval.get("approximate", {})
+        components = approximate.get("components", {})
+        lsh_minhash_output = components.get("lsh", {"chunks": []})
+        simhash_output = components.get("simhash", {"chunks": []})
+        tfidf_output = retrieval.get("exact", {"chunks": []})
+
         return {
             "status": "ok",
             "question": question,
             "top_k": top_k,
             "chunks_saved": chunks_saved,
             "index_rebuilt": index_rebuilt,
+            "tfidf": tfidf_output,
+            "simhash": simhash_output,
+            "lsh_minhash": lsh_minhash_output,
             "retrieval": {
                 "approximate": retrieval["approximate"],
                 "exact": retrieval["exact"],

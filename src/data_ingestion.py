@@ -7,9 +7,12 @@ import pdfplumber
 nltk.download("punkt", quiet=True)
 nltk.download("stopwords", quiet=True)
 
-# Larger chunks preserve more context for downstream retrieval/reranking.
-CHUNK_SIZE = 600
-CHUNK_OVERLAP = 120
+# Bump this whenever ingestion/chunking logic changes to invalidate stale cache.
+INGESTION_VERSION = "2"
+
+# Keep chunks in the recommended 200-500 token range while allowing short pages.
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
 MIN_CHUNK_SIZE = 150
 
 
@@ -76,9 +79,6 @@ def ingest_pdf(pdf_path: Path) -> list[dict]:
 
     for page in pages:
         cleaned = clean_text(page["raw_text"])
-
-        if len(cleaned.split()) < MIN_CHUNK_SIZE:
-            continue
 
         chunks = split_into_chunks(cleaned, page["page_num"])
 
