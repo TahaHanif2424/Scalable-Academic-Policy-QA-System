@@ -3,10 +3,13 @@ import textwrap
 
 from dotenv import load_dotenv
 
+# Load GROQ_API_KEY and LLM_MODEL from a .env file if present
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 DEFAULT_LLM_MODEL = "llama-3.3-70b-versatile"
+# LLM_MODEL prefers the generic LLM_MODEL env var, falls back to the legacy
+# GROQ_MODEL name, and finally to the hardcoded default
 LLM_MODEL = os.getenv("LLM_MODEL", os.getenv("GROQ_MODEL", DEFAULT_LLM_MODEL))
 MAX_CONTEXT_CHARS = 6000  # trim context fed to LLM to stay within token budget
 
@@ -21,23 +24,28 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
     """
     # Assemble a bounded context block from retrieved evidence chunks.
     if not chunks:
+        # Explicit placeholder so the LLM knows no context was available
         context_block = "[No relevant policy sections were retrieved.]"
     else:
         sections = []
         running = 0
         for idx, chunk in enumerate(chunks, start=1):
+            # Collapse newlines so each chunk reads as a single prose block
             text = chunk.get("text", "").strip().replace("\n", " ")
             label = (
                 f"[Source {idx} | chunk_id={chunk['chunk_id']} "
                 f"| page {chunk.get('page_num', '?')}]"
             )
             entry = f"{label}\n{text}"
+            # Stop adding chunks once the running total would exceed the budget
             if running + len(entry) > MAX_CONTEXT_CHARS:
                 break
             sections.append(entry)
             running += len(entry)
         context_block = "\n\n".join(sections)
 
+    # textwrap.dedent removes the common leading whitespace introduced by
+    # the indented triple-quoted string so the prompt arrives clean
     prompt = textwrap.dedent(f"""
         You are an academic policy assistant for NUST
         (National University of Sciences and Technology).
@@ -70,8 +78,9 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
 def _call_groq(prompt: str) -> tuple[str, str]:
     # Send prompt to Groq chat completion API and return text + model used.
     try:
-        from groq import Groq  # lazy import
+        from groq import Groq  # lazy import — avoids hard dependency at module load
 
+        # Guard against an env var set to whitespace
         model_name = (LLM_MODEL or "").strip() or DEFAULT_LLM_MODEL
         client = Groq(api_key=GROQ_API_KEY)
         completion = client.chat.completions.create(
@@ -86,13 +95,16 @@ def _call_groq(prompt: str) -> tuple[str, str]:
                 },
                 {"role": "user", "content": prompt},
             ],
+            # Low temperature keeps answers factual and consistent across runs
             temperature=0.2,
+            # 600 tokens is enough for a concise policy answer without truncation risk
             max_tokens=600,
         )
 
         text = completion.choices[0].message.content or ""
         return text.strip(), model_name
     except Exception as exc:
+        # Surface the error in the response rather than crashing the request
         return f"[LLM error: {exc}]", "error"
 
 
@@ -102,6 +114,7 @@ def _fallback_answer(question: str, chunks: list[dict]) -> str:
     if not chunks:
         return "No relevant policy sections were found for your question."
     top = chunks[0]
+    # Cap the snippet at 800 chars to keep the response readable without truncating too aggressively
     snippet = top.get("text", "")[:800].strip()
     return (
         f"[No LLM key configured — showing top retrieved excerpt]\n\n"
@@ -141,6 +154,7 @@ def generate_answer(question: str, chunks: list[dict]) -> dict:
     evidence = build_evidence(chunks)
 
     if not GROQ_API_KEY:
+        # No API key available — skip the LLM and return the top chunk directly
         answer = _fallback_answer(question, chunks)
         model = "none (no GROQ_API_KEY)"
     else:
