@@ -9,17 +9,18 @@ from sklearn.metrics.pairwise import cosine_similarity
 try:
     from src.database import get_all_chunks, get_chunks_by_ids
 except ModuleNotFoundError:
+    # Fall back to a flat import when running outside the src package context
     from database import get_all_chunks, get_chunks_by_ids
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 INDEX_PATH = "index/tfidf_index.pkl"  # where we save the fitted vectorizer
 TOP_K_DEFAULT = 5
 MIN_SCORE = 0.05  # discard chunks with cosine similarity below this
-TFIDF_CANDIDATE_K = 20
-GRAPH_ALPHA = 0.7
-GRAPH_SIM_THRESHOLD = 0.1
-GRAPH_MAX_ITERS = 30
-GRAPH_TOL = 1e-6
+TFIDF_CANDIDATE_K = 20  # over-fetch before reranking to give the graph enough candidates
+GRAPH_ALPHA = 0.7  # interpolation weight: higher = trust seed scores more than graph
+GRAPH_SIM_THRESHOLD = 0.1  # zero out weak inter-chunk edges to keep the graph sparse
+GRAPH_MAX_ITERS = 30  # cap iterations to bound runtime if convergence is slow
+GRAPH_TOL = 1e-6  # L1 norm change below which we consider the scores converged
 
 
 def _graph_rerank(seed_scores: list[float], candidate_matrix) -> list[float]:
@@ -29,24 +30,37 @@ def _graph_rerank(seed_scores: list[float], candidate_matrix) -> list[float]:
     """
     # Run lightweight graph propagation over candidate similarities.
     n = len(seed_scores)
+
+    # A single candidate has no neighbors to propagate through — return as-is
     if n <= 1:
         return seed_scores
 
+    # Normalize seed scores to [0, 1] so alpha blending is scale-invariant
     seed = np.asarray(seed_scores, dtype=np.float64)
     seed_max = seed.max()
     if seed_max > 0:
         seed = seed / seed_max
 
+    # Build a full pairwise cosine similarity matrix between candidate chunk vectors
     sim = cosine_similarity(candidate_matrix, candidate_matrix)
+
+    # Self-similarity is always 1 but meaningless for propagation — zero it out
     np.fill_diagonal(sim, 0.0)
+
+    # Prune weak edges to prevent noise from diffusing across unrelated chunks
     sim[sim < GRAPH_SIM_THRESHOLD] = 0.0
 
+    # Row-normalize to form a proper stochastic transition matrix;
+    # rows that sum to zero (isolated nodes) stay zero via the `where` guard
     row_sums = sim.sum(axis=1, keepdims=True)
     transition = np.divide(sim, row_sums, out=np.zeros_like(sim), where=row_sums != 0)
 
+    # Iterative propagation: blend the original seed signal with neighbor-smoothed scores
     rank = seed.copy()
     for _ in range(GRAPH_MAX_ITERS):
         updated = GRAPH_ALPHA * seed + (1.0 - GRAPH_ALPHA) * (transition @ rank)
+
+        # Early exit when the scores have stabilized within tolerance
         if np.linalg.norm(updated - rank, ord=1) < GRAPH_TOL:
             rank = updated
             break
@@ -71,10 +85,10 @@ def build_tfidf_index():
     chunk_ids = [chunk["chunk_id"] for chunk in chunks]
 
     vectorizer = TfidfVectorizer(
-        sublinear_tf=True,
-        max_df=0.85,
-        min_df=2,
-        ngram_range=(1, 2),
+        sublinear_tf=True,    # apply log(1+tf) to compress high-frequency term dominance
+        max_df=0.85,          # ignore terms appearing in >85% of chunks (too common)
+        min_df=2,             # ignore terms appearing in fewer than 2 chunks (too rare)
+        ngram_range=(1, 2),   # include both unigrams and bigrams for phrase sensitivity
         stop_words="english",
     )
 
@@ -123,10 +137,13 @@ def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
     matrix = index["matrix"]
     chunk_ids = index["chunk_ids"]
 
+    # Project the query into the same TF-IDF space as the indexed chunks
     query_vector = vectorizer.transform([query_text])
 
+    # Compute cosine similarity between the query vector and every chunk vector
     scores = cosine_similarity(query_vector, matrix).flatten()
 
+    # Filter out low-scoring chunks and attach their matrix row index for later slicing
     scored = [
         {"index": i, "chunk_id": chunk_ids[i], "tfidf_score": float(scores[i])}
         for i in range(len(chunk_ids))
@@ -134,17 +151,21 @@ def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
     ]
     scored.sort(key=lambda x: x["tfidf_score"], reverse=True)
 
+    # Over-fetch so the graph reranker has a richer neighborhood to work with
     candidate_k = max(top_k, TFIDF_CANDIDATE_K)
     candidates = scored[:candidate_k]
     if not candidates:
         return []
 
+    # Extract the sparse matrix rows for just the candidates to keep reranking fast
     candidate_indices = [item["index"] for item in candidates]
     candidate_matrix = matrix[candidate_indices]
     seed_scores = [item["tfidf_score"] for item in candidates]
 
+    # Propagate relevance through the inter-chunk similarity graph
     graph_scores = _graph_rerank(seed_scores, candidate_matrix)
 
+    # Normalize both score arrays independently before blending so neither dominates
     seed_arr = np.asarray(seed_scores, dtype=np.float64)
     graph_arr = np.asarray(graph_scores, dtype=np.float64)
 
@@ -153,6 +174,7 @@ def query_tfidf(query_text: str, top_k: int = TOP_K_DEFAULT) -> list[dict]:
     if graph_arr.max() > 0:
         graph_arr = graph_arr / graph_arr.max()
 
+    # Weighted combination: graph score gets slightly more weight (0.55) than raw TF-IDF
     combined = 0.45 * seed_arr + 0.55 * graph_arr
 
     reranked = []
